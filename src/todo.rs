@@ -146,6 +146,7 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
     let today_str = now.format("%d-%m-%Y").to_string();
     if !task_map.contains_key(&today_str) {
         println!("No todos today");
+        return Ok(());
     }
     for (i, dates) in task_map.keys().enumerate() {
         if dates == &today_str {
@@ -156,7 +157,7 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut user_input: String = String::new();
-    print!("Enter your choice: ");
+    print!("Enter date choice: ");
     std::io::stdout().flush().unwrap();
     std::io::stdin().read_line(&mut user_input).unwrap();
     print!("\n\n");
