@@ -1,5 +1,7 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::Write;
+use std::{collections::HashMap, io::Read};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -8,6 +10,7 @@ struct Task {
     title: String,
     completed: bool,
 }
+
 fn assign_id() -> String {
     Uuid::new_v4().to_string()
 }
@@ -16,7 +19,7 @@ impl Task {
     fn new(title: String) -> Self {
         Task {
             id: assign_id(),
-            title: title,
+            title,
             completed: false,
         }
     }
@@ -44,20 +47,25 @@ pub fn delete_todo() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let reader = BufReader::new(&file);
+    let mut content: String = String::new();
+    file.read_to_string(&mut content).unwrap();
 
-    let mut todos: Vec<Task> = match serde_json::from_reader(reader) {
-        Ok(f) => f,
-        Err(_) => Vec::new(),
+    let mut task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&content).unwrap()
     };
 
-    todos.retain(|todo| todo.id != id);
+    task_map.retain(|_, tasks| {
+        tasks.retain(|task| task.id != id);
+        !tasks.is_empty()
+    });
+    let json = serde_json::to_string_pretty(&task_map).unwrap();
     file.set_len(0)?;
     use std::io::Seek;
     use std::io::SeekFrom;
     file.seek(SeekFrom::Start(0))?;
-    let writer = BufWriter::new(&file);
-    serde_json::to_writer_pretty(writer, &todos)?;
+    file.write_all(json.as_bytes()).unwrap();
     println!("Deleted Successfully");
     Ok(())
 }
@@ -84,36 +92,37 @@ pub fn mark_completed() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let reader = BufReader::new(&file);
+    let mut content: String = String::new();
 
-    let mut todos: Vec<Task> = match serde_json::from_reader(reader) {
-        Ok(f) => f,
-        Err(_) => Vec::new(),
+    file.read_to_string(&mut content).unwrap();
+
+    let mut task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&content).unwrap()
     };
 
-    match todos.iter_mut().find(|task| task.id == id) {
-        Some(task) => {
-            task.completed = true;
-            println!("Marked task completed");
-        }
-
-        None => {
-            println!("No task found with id {}", id);
-            return Ok(());
+    for tasks in task_map.values_mut() {
+        for task in tasks {
+            if task.id == id {
+                task.completed = true;
+                break;
+            }
         }
     }
+
+    let json = serde_json::to_string_pretty(&task_map).unwrap();
     file.set_len(0)?;
     use std::io::Seek;
     use std::io::SeekFrom;
     file.seek(SeekFrom::Start(0))?;
-    let writer = BufWriter::new(&file);
-    serde_json::to_writer_pretty(writer, &todos)?;
+    file.write_all(json.as_bytes()).unwrap();
     println!("Updated todos saved");
     Ok(())
 }
 
 pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
-    let file = match std::fs::OpenOptions::new()
+    let mut file = match std::fs::OpenOptions::new()
         .read(true)
         .create(true)
         .write(true)
@@ -125,15 +134,57 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
             return Err(Box::new(e));
         }
     };
-    let reader = BufReader::new(&file);
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
 
-    let todos: Vec<Task> = match serde_json::from_reader(reader) {
-        Ok(t) => t,
-        Err(_) => Vec::new(),
+    let task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&content).unwrap()
     };
-    for todo in todos {
-        let content: String = serde_json::to_string_pretty(&todo)?;
-        println!("{}", content);
+    let now = Utc::now();
+    let today_str = now.format("%d-%m-%Y").to_string();
+    if !task_map.contains_key(&today_str) {
+        println!("No todos today");
+    }
+    for (i, dates) in task_map.keys().enumerate() {
+        if dates == &today_str {
+            println!("{}: Today", i + 1);
+        } else {
+            println!("{}: {}", i + 1, dates);
+        }
+    }
+
+    let mut user_input: String = String::new();
+    print!("Enter your choice: ");
+    std::io::stdout().flush().unwrap();
+    std::io::stdin().read_line(&mut user_input).unwrap();
+    print!("\n\n");
+    let user_input: usize = match user_input.trim().parse() {
+        Ok(n) => n,
+        Err(_) => {
+            println!("Invalid input");
+            return Ok(());
+        }
+    };
+
+    let selected_date = match task_map.keys().nth(user_input - 1) {
+        Some(n) => n,
+        None => {
+            println!("Wrong choice");
+            return Ok(());
+        }
+    };
+
+    if let Some(tasks) = task_map.get(selected_date) {
+        for (i, task) in tasks.iter().enumerate() {
+            println!("Task: {}", i + 1);
+            println!("id: {:?}", task.id);
+            println!("title: {:?}", task.title);
+            println!("completed: {:?}\n", task.completed);
+        }
+    } else {
+        println!("No tasks for the selected date");
     }
     Ok(())
 }
@@ -153,23 +204,28 @@ pub fn add_todo() -> Result<(), Box<dyn std::error::Error>> {
         .create(true)
         .open("todos.json")?;
 
-    let reader = BufReader::new(&file);
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
 
-    let mut todos: Vec<Task> = match serde_json::from_reader(reader) {
-        Ok(t) => t,
-        Err(_) => Vec::new(),
+    let mut task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&content).unwrap()
     };
 
     let todo = Task::new(title);
+    let now = Utc::now();
+    task_map
+        .entry(now.format("%d-%m-%Y").to_string())
+        .or_default()
+        .push(todo);
 
-    todos.push(todo);
+    let json = serde_json::to_string_pretty(&task_map).unwrap();
     file.set_len(0)?;
     use std::io::Seek;
     use std::io::SeekFrom;
     file.seek(SeekFrom::Start(0))?;
-    let writer = BufWriter::new(&file);
-    serde_json::to_writer_pretty(writer, &todos)?;
-
+    file.write_all(json.as_bytes()).unwrap();
     println!("Todo added successfully!");
     Ok(())
 }

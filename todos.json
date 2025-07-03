@@ -1,7 +1,14 @@
-[
-  {
-    "id": "ee879979-05a5-4443-b556-c1a97bc0bcf9",
-    "title": "Coding",
-    "completed": true
-  }
-]
+{
+  "03-07-2025": [
+    {
+      "id": "ac9ac7d2-a0e0-49bc-aa09-ae5edfdc5d18",
+      "title": "Coding problem: 1",
+      "completed": false
+    },
+    {
+      "id": "977d1271-7578-4c12-8e7d-cf9066147e03",
+      "title": "Coding problem: 2",
+      "completed": true
+    }
+  ]
+}
