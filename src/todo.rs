@@ -137,7 +137,7 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
 
-    let task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
+    let mut task_map: HashMap<String, Vec<Task>> = if content.trim().is_empty() {
         HashMap::new()
     } else {
         serde_json::from_str(&content).unwrap()
@@ -145,8 +145,7 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
     let today_str = now.format("%d-%m-%Y").to_string();
     if !task_map.contains_key(&today_str) {
-        println!("No todos today");
-        return Ok(());
+        task_map.insert(today_str.clone(), vec![]);
     }
     for (i, dates) in task_map.keys().enumerate() {
         if dates == &today_str {
@@ -176,16 +175,17 @@ pub fn display_todos() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     };
-
     if let Some(tasks) = task_map.get(selected_date) {
-        for (i, task) in tasks.iter().enumerate() {
-            println!("Task: {}", i + 1);
-            println!("id: {:?}", task.id);
-            println!("title: {:?}", task.title);
-            println!("completed: {:?}\n", task.completed);
+        if tasks.is_empty() {
+            println!("No tasks for the selected date");
+        } else {
+            for (i, task) in tasks.iter().enumerate() {
+                println!("Task: {}", i + 1);
+                println!("id: {:?}", task.id);
+                println!("title: {:?}", task.title);
+                println!("completed: {:?}\n", task.completed);
+            }
         }
-    } else {
-        println!("No tasks for the selected date");
     }
     Ok(())
 }
